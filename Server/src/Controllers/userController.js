@@ -5,7 +5,6 @@ import bcrypt from "bcrypt";
 import { Logger } from "borgen";
 import dotenv from "dotenv";
 
-
 dotenv.config();
 
 //@desc  Create a new  user
@@ -13,7 +12,6 @@ dotenv.config();
 export const createUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    
 
     if (!name || !email || !password) {
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -23,14 +21,10 @@ export const createUser = async (req, res) => {
       });
     }
 
-   
-
-   
-
     //Check for existing user
     const user = await User.findOne({ email });
     if (user) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
+      return res.status(StatusCodes.CONFLICT).json({
         status: "error",
         message: "A user with this email already exists",
         data: null,
@@ -110,9 +104,10 @@ export const userLogin = async (req, res) => {
 
     //Create jwt token
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
+      expiresIn: "7d",
     });
 
+    
     return res.status(StatusCodes.OK).json({
       status: "success",
       message: "User login successfull",
@@ -134,10 +129,10 @@ export const userLogin = async (req, res) => {
   }
 };
 
-//@desc Get one user ById
-//route GET /api/v1/user/:id
+//@desc Get one user info
+//route GET /api/v1/user/info
 
-export const getUserById = async (req, res) => {
+export const getUserInfo = async (req, res) => {
   try {
     const userId = res.locals.userId;
 
@@ -196,10 +191,9 @@ export const updateUserById = async (req, res) => {
   try {
     const userId = res.locals.userId;
     const { name, email } = req.body;
-    
 
     const user = await User.findById(userId).select("-password");
-    console.log(userId)
+    console.log(userId);
 
     if (!user) {
       return res.status(StatusCodes.NOT_FOUND).json({
@@ -212,8 +206,6 @@ export const updateUserById = async (req, res) => {
     //Update user details
     if (name) user.name = name;
     if (email) user.email = email;
-
-    
 
     const updatedUser = await user.save();
 
