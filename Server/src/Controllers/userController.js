@@ -184,7 +184,7 @@ export const getAllUsers = async (req, res) => {
     });
   }
 };
-//@desc Update user account byId
+//@desc Update user account 
 //@route PUT /api/v1/user/update
 
 export const updateUserById = async (req, res) => {

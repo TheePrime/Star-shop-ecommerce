@@ -178,3 +178,36 @@ export const getAllAdmins = async (req, res) => {
     });
   }
 };
+
+
+//@desc Update admin details by id and only superAdmin
+//@route PUT /api/v1/admin/update/:id
+
+export const updateAdminById= async (req,res)=>{
+    try {
+        const adminId = res.locals.userId
+        const userId = req.params.id
+        
+        const admin = await  Admin.findById(userId)
+        if(!admin){
+            return res.status(StatusCodes.UNAUTHORIZED).json({
+                status:'error',
+                message:'Admin not found',
+                data:null
+            })
+        }
+
+        const currentAdminUser= await Admin.findById(adminId)
+        if(currentAdminUser.role !='superAdmin'){
+            return res.status()
+        }
+    } catch (error) {
+        Logger.error({message: error.message})
+
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status:'error',
+            message:'An error occured while updating an admin',
+            data:null
+        })
+    }
+}
