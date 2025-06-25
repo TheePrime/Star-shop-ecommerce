@@ -1,10 +1,15 @@
 import express from 'express'
 import ConnectDb from './connect.js'
 import dotenv from 'dotenv'
+import router from './src/Routes/router.js'
+
+
+
 
 dotenv.config()
 
 const app = express()
+app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT
 
 
@@ -18,7 +23,7 @@ app.get('/',(req,res)=>{
 
 //Routes
 
-
+app.use(router)
 
 
 //Start server to connect to database
