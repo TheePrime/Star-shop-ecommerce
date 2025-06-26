@@ -127,10 +127,10 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-//@desc fetch a user's info
+//@desc fetch a admin info
 //@route GET /api/v1/admin/info
 
-export const getUserInfo = async (req, res) => {
+export const getAdminInfo = async (req, res) => {
   try {
     const userId = res.locals.userId;
     const admin = await Admin.findById(userId);
@@ -145,7 +145,7 @@ export const getUserInfo = async (req, res) => {
     return res.status(StatusCodes.OK).json({
       status: "success",
       message: "Admin fetched successfully",
-      data: null,
+      data: admin,
     });
   } catch (error) {
     Logger.error({ message: error.message });
@@ -161,6 +161,17 @@ export const getUserInfo = async (req, res) => {
 //@route GET /api/v1/admin/all
 export const getAllAdmins = async (req, res) => {
   try {
+    const userId = res.locals.userId;
+    const currentAdminUser = await Admin.findById(userId);
+
+    if (currentAdminUser.role != "superAdmin") {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: "error",
+        message: "You are not allowed to perform this function",
+        data: null,
+      });
+    }
+
     const admins = await Admin.find().select("-password");
 
     return res.status(StatusCodes.OK).json({
@@ -179,35 +190,144 @@ export const getAllAdmins = async (req, res) => {
   }
 };
 
-
 //@desc Update admin details by id and only superAdmin
 //@route PUT /api/v1/admin/update/:id
 
-export const updateAdminById= async (req,res)=>{
-    try {
-        const adminId = res.locals.userId
-        const userId = req.params.id
-        
-        const admin = await  Admin.findById(userId)
-        if(!admin){
-            return res.status(StatusCodes.UNAUTHORIZED).json({
-                status:'error',
-                message:'Admin not found',
-                data:null
-            })
-        }
+export const updateAdminById = async (req, res) => {
+  try {
+    const adminId = res.locals.userId;
+    const userId = req.params.id;
+    const { name, email } = req.body;
 
-        const currentAdminUser= await Admin.findById(adminId)
-        if(currentAdminUser.role !='superAdmin'){
-            return res.status()
-        }
-    } catch (error) {
-        Logger.error({message: error.message})
-
-        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-            status:'error',
-            message:'An error occured while updating an admin',
-            data:null
-        })
+    const admin = await Admin.findById(userId);
+    if (!admin) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: "error",
+        message: "Admin not found",
+        data: null,
+      });
     }
-}
+
+    const currentAdminUser = await Admin.findById(adminId);
+    if (currentAdminUser.role != "superAdmin") {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: "error",
+        message: "You are not allowed to perform this function",
+        data: null,
+      });
+    }
+
+    if (name) admin.name = name;
+    if (email) admin.email = email;
+
+    const updatedAdmin = await admin.save();
+
+    return res.status(StatusCodes.OK).json({
+      status: "success",
+      message: "Admin updated successfully",
+      data: updatedAdmin,
+    });
+  } catch (error) {
+    Logger.error({ message: error.message });
+
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "An error occured while updating an admin",
+      data: null,
+    });
+  }
+};
+
+//@desc update the admin password
+//@route PUT /api/v1/admin/password/:id
+
+export const updateAdminPassword = async (req, res) => {
+  try {
+    const userId = res.locals.userId;
+    const adminId = req.params.id;
+    const {oldPassword, newPassword} = req.body
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Admin  not found",
+        data: null,
+      });
+    }
+
+    const currentAdminUser = await Admin.findById(userId);
+    if (currentAdminUser.role != "superAdmin") {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: "error",
+        message: "You are not allowed to perform this function",
+        data: null,
+      });
+    }
+
+    const isPasswordValid =await  bcrypt.compare(oldPassword, admin.password)
+    if(!isPasswordValid){
+        return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: 'error',
+        message: 'Invalid old password',
+        data: null,
+      })
+    }
+
+    admin.password = await bcrypt.hash(newPassword, 10)
+    const updatedAdmin = await admin.save()
+
+     return res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: 'Admin password updated successfully',
+      data: {
+        name: updatedAdmin.name,
+        email: updatedAdmin.email,
+      },
+    })
+
+  } catch (error) {
+    Logger.error({ message: error.message });
+
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "An error occured while updating an admin password",
+      data: null,
+    });
+  }
+};
+
+//@desc Delete admin by id
+//@route DELETE /api/v1/admin/delete/:id
+
+export const deleteAdmin = async (req, res) => {
+  try {
+    const userId = res.locals.userId;
+    const adminId = req.params.id;
+
+    const currentAdminUser = await Admin.findById(userId);
+    if (currentAdminUser.role != "superAdmin") {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: "error",
+        message: "You are not allowed to perform this function",
+        data: null,
+      });
+    }
+
+    const deletedAdmin = await Admin.findByIdAndDelete(adminId);
+
+    return res.status(StatusCodes.OK).json({
+      status: "error",
+      message: "Admin updated successfully",
+      data: null,
+    });
+  } catch (error) {
+    Logger.error({ message: error.message });
+
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "An error occured while deleting an admin",
+      data: null,
+    });
+  }
+};

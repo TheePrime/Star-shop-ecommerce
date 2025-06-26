@@ -212,7 +212,10 @@ export const updateUserById = async (req, res) => {
     return res.status(StatusCodes.OK).json({
       status: "error",
       message: "User updated successfully",
-      data: updatedUser,
+      data: {
+        name: updatedUser.name,
+        email: updatedUser.email,
+      },
     });
   } catch (error) {
     Logger.error({ message: error.message });
@@ -225,12 +228,72 @@ export const updateUserById = async (req, res) => {
   }
 };
 
+
+//@desc update user password
+//@route PUT /api/v1/user/password/:id
+
+export const updateUserPassword = async (req,res)=>{
+  try {
+    const userId = res.locals.userId
+    const {oldPassword,newPassword} = req.body
+
+    if(!oldPassword||!newPassword){
+       return res.status(StatusCodes.NOT_FOUND).json({
+        status: 'error',
+        message: 'Please check missing fields',
+        data: null,
+      })
+    }
+
+    const user = await User.findById(userId)
+    if(!user){
+       return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: 'Please login to perform this action',
+        data: null,
+      })
+    }
+
+    const isPasswordValid = await bcrypt.compare(oldPassword, user.password)
+    if(!isPasswordValid){
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        status: 'error',
+        message: 'Invalid old password',
+        data: null,
+      })
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10)
+
+    const updatedUser = await user.save()
+
+    res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: 'User password updated successfully',
+      data: {
+        name: updatedUser.name,
+        email: updatedUser.email
+      },
+    })
+
+
+  } catch (error) {
+    Logger.error({ message: error.message });
+
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "A problem occured while updating a user",
+      data: null,
+    });
+  }
+}
+
 //@desc Delete user account
 //@route DELETE /api/v1/user
 
 export const deleteUserById = async (req, res) => {
   try {
-    const userId = req.locals.userId;
+    const userId = res.locals.userId;
 
     const user = await User.findByIdAndDelete(userId);
     if (!user) {
