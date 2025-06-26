@@ -25,6 +25,10 @@ const ProductSchema= new Schema({
     imageFileId:{
         type: String,
     },
+    quantity:{
+        type: Number,
+        required: true,
+    }
 },
 {timestamps:  true}
 )

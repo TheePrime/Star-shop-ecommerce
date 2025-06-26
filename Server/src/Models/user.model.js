@@ -15,6 +15,10 @@ import {model,Schema} from 'mongoose'
         type: String,
         required:true
     },
+    cart:[{
+        product:{type: Schema.Types.ObjectId, ref: 'Product'},
+        quantity:{ type:Number, required:true},
+    }]
 },
 {timestamps:true}
 )
