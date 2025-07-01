@@ -8,10 +8,10 @@ import { Logger } from "borgen";
 //@route POST /api/v1/product/create
 export const createProduct = async (req, res) => {
   try {
-    const { name, price, category, description } = req.body;
+    const { name, price, category, description,quantity } = req.body;
     const image = req.file;
 
-    if (!name || !price || !category || !description || !image) {
+    if (!name || !price || !category || !description || !image ||!quantity) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "erorr",
         message: "Please fill all the required product fields",
@@ -32,6 +32,7 @@ export const createProduct = async (req, res) => {
       price,
       description,
       category,
+      quantity,
       imageUrl: uploadResponse.url,
       imageFileId: uploadResponse.fileId
     });
