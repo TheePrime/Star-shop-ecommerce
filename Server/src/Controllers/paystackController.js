@@ -1,40 +1,40 @@
-import axios from 'axios';
-import { StatusCodes } from 'http-status-codes';
-import User from '../Models/user.model.js';
-import crypto from 'crypto'
-import {Logger} from 'borgen'
-import dotenv from 'dotenv'
+import axios from "axios";
+import { StatusCodes } from "http-status-codes";
+import User from "../Models/user.model.js";
+import crypto from "crypto";
+import { Logger } from "borgen";
+import dotenv from "dotenv";
 
-dotenv.config()
+dotenv.config();
 
 export const initializePayment = async (req, res) => {
   try {
     const userId = res.locals.userId;
     const { paymentMethod, phone } = req.body;
 
-    if (!paymentMethod || paymentMethod !== 'mpesa') {
+    if (!paymentMethod || paymentMethod !== "mpesa") {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        message: 'Only M-Pesa via Paystack is supported for now.',
+        status: "error",
+        message: "Only M-Pesa via Paystack is supported for now.",
       });
     }
 
     if (!phone) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        message: 'M-Pesa phone number is required.',
+        status: "error",
+        message: "M-Pesa phone number is required.",
       });
     }
 
     const user = await User.findById(userId).populate({
-      path: 'cart.product',
-      select: 'price name',
+      path: "cart.product",
+      select: "price name",
     });
 
     if (!user || user.cart.length === 0) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        message: 'Cart is empty or user not found.',
+        status: "error",
+        message: "Cart is empty or user not found.",
       });
     }
 
@@ -43,15 +43,15 @@ export const initializePayment = async (req, res) => {
     }, 0);
 
     const response = await axios.post(
-      'https://api.paystack.co/transaction/initialize',
+      "https://api.paystack.co/transaction/initialize",
       {
         email: user.email,
         amount: totalCost * 100, // Paystack expects amount in kobo
         metadata: {
           custom_fields: [
             {
-              display_name: 'M-Pesa Number',
-              variable_name: 'mpesa_number',
+              display_name: "M-Pesa Number",
+              variable_name: "mpesa_number",
               value: phone,
             },
           ],
@@ -60,7 +60,7 @@ export const initializePayment = async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       }
     );
@@ -68,80 +68,149 @@ export const initializePayment = async (req, res) => {
     const { authorization_url } = response.data.data;
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
-      message: 'Payment initialized',
+      status: "success",
+      message: "Payment initialized",
       data: {
         paymentUrl: authorization_url,
       },
     });
   } catch (error) {
-    console.log(error)
-    Logger.error({message: error.message});
+    console.log(error);
+    Logger.error({ message: error.message });
 
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
-      message: 'Payment initialization failed',
-      data:null
+      status: "error",
+      message: "Payment initialization failed",
+      data: null,
+    });
+  }
+};
+
+export const paystackWebhook = async (req, res) => {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+
+  try {
+    // Verify signature
+    const hash = crypto
+      .createHmac("sha512", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (hash == req.headers["x-paystack-signature"]) {
+      const event = req.body;
+      const status = event.data.status
+      if (event.event.split(".")[0] === "charge") {
+        if (status == "success") {
+          const email = event.data?.customer?.email;
+          if (!email)
+            return res.status(StatusCodes.BAD_REQUEST).send("Missing email");
+
+          const user = await User.findOne({ email }).populate("cart.product");
+          if (!user)
+            return res.status(StatusCodes.NOT_FOUND).send("User not found");
+
+          const totalCost = user.cart.reduce((sum, item) => {
+            return sum + item.product.price * item.quantity;
+          }, 0);
+
+          user.balance -= totalCost;
+          user.cart = [];
+          await user.save();
+
+          Logger.info(`✅ Payment for ${email} succeeded. Cart cleared.`);
+          return res.status(StatusCodes.OK).json({
+            status: "success",
+            message: "Payment completed successfully",
+            data: null,
+          });
+        }
+      }
+    }
+
+    return res.sendStatus(StatusCodes.OK);
+  } catch (error) {
+    Logger.error({ message: error.message });
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "An error occured while running webhook",
+      data: null,
     });
   }
 };
 
 
+//Verify transactions
 
-
-
-
-export const paystackWebhook = async (req, res) => {
-  const secret = process.env.PAYSTACK_SECRET_KEY
+export const verifyTransaction = async (req, res) => {
+  const { reference } = req.params;
 
   try {
-    
-    // Verify signature
-    const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex')
+    const response = await axios.get(`https://api.paystack.co/transaction/verify/${reference}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      },
+    });
 
-    if (hash == req.headers['x-paystack-signature']) {
-       const event = req.body
-    
-
-    if (event.event.split('.')[0] === "charge.success") {
-      const email = event.data?.customer?.email
-      if (!email) return res.status(StatusCodes.BAD_REQUEST).send('Missing email')
-
-      const user = await User.findOne({ email }).populate('cart.product')
-      if (!user) return res.status(StatusCodes.NOT_FOUND).send('User not found')
-
-      const totalCost = user.cart.reduce((sum, item) => {
-        return sum + item.product.price * item.quantity
-      }, 0)
-
-      user.balance -= totalCost
-      user.cart = []
-      await user.save()
-
-      Logger.info(`✅ Payment for ${email} succeeded. Cart cleared.`)
-      return res.status(StatusCodes.OK).json({
-        status:'success',
-        message:'Payment completed successfully',
-        data:null
-      })
-    }
-    }
-
-   
-
-    
-      return res.sendStatus(StatusCodes.OK)
-      
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: 'Transaction verified successfully',
+      data: response.data.data,
+    });
   } catch (error) {
-    Logger.error({ message: error.message })
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status:'error',
-      message:'An error occured while running webhook',
-      data:null
-    })
+      status: 'error',
+      message: 'Failed to verify transaction',
+      data: error.response?.data || error.message,
+    });
   }
-}
+};
 
 
+//fetch a transaction
+
+export const fetchTransaction = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const response = await axios.get(`https://api.paystack.co/transaction/${id}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      },
+    });
+
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      data: response.data.data,
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to fetch transaction',
+      data: error.response?.data || error.message,
+    });
+  }
+};
 
 
+//List all transactions
+
+export const listTransactions = async (req, res) => {
+  try {
+    const response = await axios.get(`https://api.paystack.co/transaction`, {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      },
+    });
+
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      data: response.data.data,
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Could not fetch transactions',
+      data: error.response?.data || error.message,
+    });
+  }
+};
